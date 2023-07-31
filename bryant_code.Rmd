@@ -1,0 +1,87 @@
+```{r}
+library(tidyverse)
+library(here)
+```
+
+```{r}
+# Get list of all files in this folder
+all_files <- list.files(path = here("CSVs"), pattern = "*.csv", full.names = TRUE)
+```
+
+```{r}
+library(tidyverse)
+
+# Initialize an empty list to store the individual data frames
+all_data_without_blanks <- data.frame()
+all_data_with_blanks <- data.frame()
+file = all_files[1]
+
+#Remove filenames with "blank" in them
+all_files_without_blanks <- all_files[!grepl("Blank", all_files)]
+
+all_blank_files <- all_files[grepl("Blank", all_files)]
+
+for (file in all_files_without_blanks) {
+  # Extract metadata from filename
+  filename <- str_extract(file, "(?<=/CSVs/)[^/]+(?=\\..+$)")
+  split_filename <- str_split(filename, " ")[[1]]
+  
+  date <- split_filename[1]
+  concentration <- split_filename[2]
+  compound <- split_filename[4]
+  replicate <- split_filename[5]
+  
+  # Read in the data
+  data <- read_csv(file, col_names = c("Raman_Shift", "Intensity"), skip = 2) %>%
+    mutate(Raman_Shift = as.character(Raman_Shift))  %>% 
+    mutate(Date = date,
+           Concentration = concentration,
+           Compound = compound,
+           Replicate = replicate)  %>% 
+           select(-X3)
+  
+  # Append to data frame
+    all_data_without_blanks <- bind_rows(all_data_without_blanks, data)
+  
+}
+
+#Do the same for the blank files
+for (file in all_blank_files) {
+  # Extract metadata from filename
+  filename <- str_extract(file, "(?<=/CSVs/)[^/]+(?=\\..+$)")
+  split_filename <- str_split(filename, " ")[[1]]
+  
+  date <- split_filename[1]
+  concentration <- "Blank"
+  compound <- "Blank"
+  replicate <- split_filename[3]
+  
+  # Read in the data
+  data <- read_csv(file, col_names = c("Raman_Shift", "Intensity"), skip = 2) %>%
+    mutate(Raman_Shift = as.character(Raman_Shift))  %>% 
+    mutate(Date = date,
+           Concentration = concentration,
+           Compound = compound,
+           Replicate = replicate)  %>% 
+           select(-X3)
+  
+  # Append to data frame
+    all_data_with_blanks <- bind_rows(all_data_with_blanks, data)
+  
+}
+```
+
+```{r}
+# Bind all data frames together
+all_data <- bind_rows(all_data_without_blanks, all_data_with_blanks)  %>% 
+    drop_na()
+
+# Group by technical replicates and compute average and standard deviation
+summary_df <- all_data %>%
+  group_by(Date, Concentration, Compound, Replicate, `Technical Replicate`) %>%
+  summarise(Mean_Intensity = mean(Intensity, na.rm = TRUE),
+            StdDev_Intensity = sd(Intensity, na.rm = TRUE))
+
+print(summary_df)
+
+```
